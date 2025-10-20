@@ -4,13 +4,16 @@ import {
   GatewayIntentBits,
   EmbedBuilder,
   ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   TextInputBuilder,
   TextInputStyle,
   Events,
   REST,
   Routes,
   SlashCommandBuilder,
-  ModalBuilder
+  ModalBuilder,
+  InteractionType
 } from 'discord.js';
 import express from 'express';
 import dotenv from 'dotenv';
@@ -25,26 +28,23 @@ app.listen(port, () => console.log(`Serveur en ligne sur le port ${port}`));
 
 // --- bot setup ---
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers
+  ]
 });
 
-client.once(Events.ClientReady, async () => {
+client.once(Events.ClientReady, () => {
   console.log(`✅ Connecté en tant que ${client.user.tag}`);
-
-  // Test canal candidature
-  try {
-    const testChannel = await client.channels.fetch(CANDIDATURE_CHANNEL_ID);
-    await testChannel.send('Bot prêt et test OK ✅');
-  } catch (err) {
-    console.error('❌ Erreur test canal candidature :', err);
-  }
 });
 
-// --- canal commande et canal candidature ---
-const COMMAND_CHANNEL_ID = '1429799246755790848'; // salon où les utilisateurs tapent /formulaire
-const CANDIDATURE_CHANNEL_ID = '1429795283595694130'; // salon où les admins reçoivent les candidatures
+// --- salon commande et candidature ---
+const COMMAND_CHANNEL_ID = '1429799246755790848';
+const CANDIDATURE_CHANNEL_ID = '1429795283595694130';
 
-// --- slash command /formulaire ---
+// --- slash command ---
 const commands = [
   new SlashCommandBuilder()
     .setName('formulaire')
@@ -68,7 +68,8 @@ const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
 // --- interaction ---
 client.on(Events.InteractionCreate, async interaction => {
-  // Commande slash
+
+  // --- Slash Command ---
   if (interaction.isChatInputCommand() && interaction.commandName === 'formulaire') {
     if (interaction.channelId !== COMMAND_CHANNEL_ID) {
       return interaction.reply({ content: '❌ Tu ne peux utiliser cette commande ici.', ephemeral: true });
@@ -98,8 +99,8 @@ client.on(Events.InteractionCreate, async interaction => {
     await interaction.showModal(modal);
   }
 
-  // Modal submit
-  if (interaction.isModalSubmit() && interaction.customId === 'candidatureModal') {
+  // --- Modal Submit ---
+  if (interaction.type === InteractionType.ModalSubmit && interaction.customId === 'candidatureModal') {
     const pseudo = interaction.fields.getTextInputValue('pseudo');
     const age = interaction.fields.getTextInputValue('age');
     const experience = interaction.fields.getTextInputValue('experience');
@@ -118,14 +119,67 @@ client.on(Events.InteractionCreate, async interaction => {
       .setColor('Blue')
       .setTimestamp();
 
+    const rowButtons = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('accept')
+        .setLabel('✅ Accepter')
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId('refuse')
+        .setLabel('❌ Refuser')
+        .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId('discussion')
+        .setLabel('💬 Discussion')
+        .setStyle(ButtonStyle.Secondary)
+    );
+
     try {
       const channel = await client.channels.fetch(CANDIDATURE_CHANNEL_ID);
-      if (!channel) throw new Error('Canal candidature introuvable !');
-      await channel.send({ embeds: [embed] });
+      await channel.send({ embeds: [embed], components: [rowButtons] });
       await interaction.reply({ content: '✅ Ta candidature a été envoyée aux admins !', ephemeral: true });
-    } catch (error) {
-      console.error('❌ Erreur lors de l\'envoi de l\'embed :', error);
-      await interaction.reply({ content: '❌ Une erreur est survenue, contacte un admin.', ephemeral: true });
+    } catch (err) {
+      console.error('❌ Erreur envoi candidature :', err);
+      await interaction.reply({ content: '❌ Une erreur est survenue.', ephemeral: true });
+    }
+  }
+
+  // --- Gestion des boutons ---
+  if (interaction.isButton()) {
+    if (!interaction.guild) return;
+
+    const member = interaction.member;
+    const message = interaction.message;
+
+    // Accepter
+    if (interaction.customId === 'accept') {
+      await interaction.reply({ content: `✅ Candidature acceptée par ${member.user.tag}`, ephemeral: true });
+      await message.edit({ components: [] }); // retire les boutons
+    }
+
+    // Refuser
+    if (interaction.customId === 'refuse') {
+      await interaction.reply({ content: `❌ Candidature refusée par ${member.user.tag}`, ephemeral: true });
+      await message.edit({ components: [] });
+    }
+
+    // Discussion
+    if (interaction.customId === 'discussion') {
+      // Crée un salon privé temporaire
+      const guild = interaction.guild;
+      const candidateName = message.embeds[0].fields.find(f => f.name === 'Pseudo')?.value || 'candidat';
+      const category = null; // si tu veux mettre dans une catégorie spécifique
+      const channel = await guild.channels.create({
+        name: `discussion-${candidateName}`,
+        type: 0, // text channel
+        parent: category,
+        permissionOverwrites: [
+          { id: guild.roles.everyone.id, deny: ['ViewChannel'] },
+          { id: member.id, allow: ['ViewChannel', 'SendMessages'] },
+          { id: client.user.id, allow: ['ViewChannel', 'SendMessages'] }
+        ]
+      });
+      await interaction.reply({ content: `💬 Salon privé créé : ${channel}`, ephemeral: true });
     }
   }
 });
