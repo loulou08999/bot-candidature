@@ -9,7 +9,8 @@ import {
   Events,
   REST,
   Routes,
-  SlashCommandBuilder
+  SlashCommandBuilder,
+  ModalBuilder
 } from 'discord.js';
 import express from 'express';
 import dotenv from 'dotenv';
@@ -24,12 +25,24 @@ app.listen(port, () => console.log(`Serveur en ligne sur le port ${port}`));
 
 // --- bot setup ---
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages]
 });
 
-client.once(Events.ClientReady, () => {
+client.once(Events.ClientReady, async () => {
   console.log(`✅ Connecté en tant que ${client.user.tag}`);
+
+  // Test canal candidature
+  try {
+    const testChannel = await client.channels.fetch(CANDIDATURE_CHANNEL_ID);
+    await testChannel.send('Bot prêt et test OK ✅');
+  } catch (err) {
+    console.error('❌ Erreur test canal candidature :', err);
+  }
 });
+
+// --- canal commande et canal candidature ---
+const COMMAND_CHANNEL_ID = '1429799246755790848'; // salon où les utilisateurs tapent /formulaire
+const CANDIDATURE_CHANNEL_ID = '1429795283595694130'; // salon où les admins reçoivent les candidatures
 
 // --- slash command /formulaire ---
 const commands = [
@@ -49,48 +62,40 @@ const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
     );
     console.log('Commandes slash enregistrées !');
   } catch (error) {
-    console.error(error);
+    console.error('❌ Erreur enregistrement slash commands :', error);
   }
 })();
 
-// --- interaction avec le formulaire (modal) ---
+// --- interaction ---
 client.on(Events.InteractionCreate, async interaction => {
   // Commande slash
   if (interaction.isChatInputCommand() && interaction.commandName === 'formulaire') {
-    const modal = new ActionRowBuilder()
-    const modalBuilder = new TextInputBuilder();
-    // Création du modal
-    const candidatureModal = new ActionRowBuilder();
-    
-    const modalForm = new TextInputBuilder()
-      .setCustomId('pseudo')
-      .setLabel('Ton pseudo Discord')
-      .setStyle(TextInputStyle.Short)
-      .setRequired(true);
+    if (interaction.channelId !== COMMAND_CHANNEL_ID) {
+      return interaction.reply({ content: '❌ Tu ne peux utiliser cette commande ici.', ephemeral: true });
+    }
 
-    const ageInput = new TextInputBuilder()
-      .setCustomId('age')
-      .setLabel('Ton âge')
-      .setStyle(TextInputStyle.Short)
-      .setRequired(true);
-
-    const experienceInput = new TextInputBuilder()
-      .setCustomId('experience')
-      .setLabel('Ton expérience sur le serveur')
-      .setStyle(TextInputStyle.Paragraph)
-      .setRequired(true);
-
-    const row1 = new ActionRowBuilder().addComponents(modalForm);
-    const row2 = new ActionRowBuilder().addComponents(ageInput);
-    const row3 = new ActionRowBuilder().addComponents(experienceInput);
-
-    const { ModalBuilder } = await import('discord.js');
-    const modalFinal = new ModalBuilder()
+    const modal = new ModalBuilder()
       .setCustomId('candidatureModal')
-      .setTitle('Formulaire de candidature')
-      .addComponents(row1, row2, row3);
+      .setTitle('Formulaire de candidature');
 
-    await interaction.showModal(modalFinal);
+    const questions = [
+      { id: 'pseudo', label: 'Ton pseudo Discord', style: TextInputStyle.Short },
+      { id: 'age', label: 'Ton âge', style: TextInputStyle.Short },
+      { id: 'experience', label: 'Ton expérience sur le serveur', style: TextInputStyle.Paragraph },
+      { id: 'motivation', label: 'Pourquoi veux-tu rejoindre ?', style: TextInputStyle.Paragraph },
+      { id: 'dispo', label: 'Tes disponibilités', style: TextInputStyle.Short }
+    ];
+
+    const rows = questions.map(q => new ActionRowBuilder().addComponents(
+      new TextInputBuilder()
+        .setCustomId(q.id)
+        .setLabel(q.label)
+        .setStyle(q.style)
+        .setRequired(true)
+    ));
+
+    modal.addComponents(...rows);
+    await interaction.showModal(modal);
   }
 
   // Modal submit
@@ -98,23 +103,30 @@ client.on(Events.InteractionCreate, async interaction => {
     const pseudo = interaction.fields.getTextInputValue('pseudo');
     const age = interaction.fields.getTextInputValue('age');
     const experience = interaction.fields.getTextInputValue('experience');
+    const motivation = interaction.fields.getTextInputValue('motivation');
+    const dispo = interaction.fields.getTextInputValue('dispo');
 
-    // Embed à envoyer
     const embed = new EmbedBuilder()
       .setTitle('📄 Nouvelle candidature')
       .addFields(
         { name: 'Pseudo', value: pseudo },
         { name: 'Âge', value: age },
-        { name: 'Expérience', value: experience }
+        { name: 'Expérience', value: experience },
+        { name: 'Motivation', value: motivation },
+        { name: 'Disponibilités', value: dispo }
       )
       .setColor('Blue')
       .setTimestamp();
 
-    // Remplace "CANDIDATURE_CHANNEL_ID" par l'ID de ton canal staff
-    const channel = await client.channels.fetch('CANDIDATURE_CHANNEL_ID');
-    channel.send({ embeds: [embed] });
-
-    await interaction.reply({ content: '✅ Ta candidature a été envoyée !', ephemeral: true });
+    try {
+      const channel = await client.channels.fetch(CANDIDATURE_CHANNEL_ID);
+      if (!channel) throw new Error('Canal candidature introuvable !');
+      await channel.send({ embeds: [embed] });
+      await interaction.reply({ content: '✅ Ta candidature a été envoyée aux admins !', ephemeral: true });
+    } catch (error) {
+      console.error('❌ Erreur lors de l\'envoi de l\'embed :', error);
+      await interaction.reply({ content: '❌ Une erreur est survenue, contacte un admin.', ephemeral: true });
+    }
   }
 });
 
