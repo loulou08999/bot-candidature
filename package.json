@@ -1,0 +1,17 @@
+{
+  "name": "bot-candidature",
+  "version": "1.0.0",
+  "description": "Bot Discord de candidature modérateur",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "deploy": "node deploy-commands.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.13.0",
+    "dotenv": "^16.4.5"
+  },
+  "engines": {
+    "node": "18.x"
+  }
+}
