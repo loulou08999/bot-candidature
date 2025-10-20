@@ -1,14 +1,15 @@
 {
-  "name": "bot-candidature",
+  "name": "candidature-bot",
   "version": "1.0.0",
-  "type": "module",
-  "description": "Bot Discord pour gérer les candidatures de modérateurs",
+  "description": "Bot Discord de candidature",
   "main": "index.js",
+  "type": "module",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
     "discord.js": "^14.15.3",
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2"
   }
 }
