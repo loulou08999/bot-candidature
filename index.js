@@ -29,7 +29,6 @@ const DATA_FILE = "./data.json";
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 const TOKEN = process.env.TOKEN;
-const CANDIDATURE_CHANNEL_ID = process.env.CANDIDATURE_CHANNEL_ID;
 const PORT = process.env.PORT || 3000;
 
 // --- Express keep alive ---
@@ -56,6 +55,7 @@ const commands = [
   new SlashCommandBuilder().setName("caresser").setDescription("Caresser F4X_Cat (+10% bonheur)."),
   new SlashCommandBuilder().setName("bonheur").setDescription("Voir le bonheur de F4X_Cat."),
   new SlashCommandBuilder().setName("admin").setDescription("Accéder au panel admin de F4X_Cat."),
+  new SlashCommandBuilder().setName("regardez").setDescription("Voir les infos complètes de F4X_Cat (admin)."),
 ].map(c => c.toJSON());
 
 // --- Enregistrer les commandes ---
@@ -92,11 +92,10 @@ function checkEtat(){
   if(data.faim <= 0){
     data.etat = "mort";
     if(data.maitre){
-      const role = client.guilds.cache.first().roles.cache.get(ROLE_MAITRE);
-      if(role){
-        const member = client.guilds.cache.first().members.cache.get(data.maitre);
-        if(member) member.roles.remove(role).catch(()=>{});
-      }
+      const guild = client.guilds.cache.get(GUILD_ID);
+      const role = guild.roles.cache.get(ROLE_MAITRE);
+      const member = guild.members.cache.get(data.maitre);
+      if(role && member) member.roles.remove(role).catch(()=>{});
     }
     data.maitre = null;
     data.faim = 100;
@@ -117,58 +116,59 @@ client.once("ready",()=>console.log(`🤖 Connecté en tant ${client.user.tag}`)
 // --- Interaction principale ---
 client.on(Events.InteractionCreate, async interaction=>{
   if(interaction.isChatInputCommand()){
-    if(interaction.channelId!==SALON_COMMANDES && !["admin","abandonner"].includes(interaction.commandName))
-      return interaction.reply({ content:"❌ Cette commande n'est pas autorisée ici.", ephemeral:true });
+    // --- Contrôle salon ---
+    if(interaction.channelId!==SALON_COMMANDES && !["admin","abandonner","regardez"].includes(interaction.commandName))
+      return interaction.reply({ content:"❌ Cette commande n'est pas autorisée ici.", ephemeral:false });
 
     // --- Adopter ---
     if(interaction.commandName==="adopter"){
-      if(data.maitre) return interaction.reply({ content:`😿 F4X_Cat est déjà adopté par <@${data.maitre}> !`, ephemeral:true });
+      if(data.maitre) return interaction.reply({ content:`😿 F4X_Cat est déjà adopté par <@${data.maitre}> !`, ephemeral:false });
       data.maitre=interaction.user.id;
       saveMaitreGentillesse(interaction.user.id,0);
       saveData();
       const role = interaction.guild.roles.cache.get(ROLE_MAITRE);
       if(role) await interaction.member.roles.add(role);
-      return interaction.reply(`🎉 Bravo <@${interaction.user.id}> ! Tu as adopté **F4X_Cat** 🐱\n🍀 Prends bien soin de lui !`);
+      return interaction.reply({ content:`🎉 Bravo <@${interaction.user.id}> ! Tu as adopté **F4X_Cat** 🐱\n🍀 Prends bien soin de lui !`, ephemeral:false });
     }
 
     // --- Abandonner ---
     if(interaction.commandName==="abandonner"){
-      if(interaction.user.id!==data.maitre) return interaction.reply({ content:"❌ Seul le maître peut abandonner F4X_Cat.", ephemeral:true });
+      if(interaction.user.id!==data.maitre) return interaction.reply({ content:"❌ Seul le maître peut abandonner F4X_Cat.", ephemeral:false });
       const role = interaction.guild.roles.cache.get(ROLE_MAITRE);
       if(role) await interaction.member.roles.remove(role);
       data.maitre=null;
       saveData();
-      return interaction.reply("😿 F4X_Cat a été abandonné et est maintenant disponible pour adoption !");
+      return interaction.reply({ content:"😿 F4X_Cat a été abandonné et est maintenant disponible pour adoption !", ephemeral:false });
     }
 
     // --- Faim ---
     if(interaction.commandName==="faim")
-      return interaction.reply(`🍗 Faim de F4X_Cat : **${data.faim}%**\n${barreProgression(data.faim,"faim")}`);
+      return interaction.reply({ content:`🍗 Faim de F4X_Cat : **${data.faim}%**\n${barreProgression(data.faim,"faim")}`, ephemeral:false });
 
     // --- Nourrir ---
     if(interaction.commandName==="nourrir"){
-      if(interaction.user.id!==data.maitre) return interaction.reply({ content:"❌ Seul le maître peut nourrir F4X_Cat.", ephemeral:true });
+      if(interaction.user.id!==data.maitre) return interaction.reply({ content:"❌ Seul le maître peut nourrir F4X_Cat.", ephemeral:false });
       data.faim=Math.min(100,data.faim+10);
       if(data.etat==="depression") data.faim=Math.min(100,data.faim+5);
       saveMaitreGentillesse(interaction.user.id,2);
       checkEtat();
       saveData();
-      return interaction.reply(`🍖 F4X_Cat a été nourri ! Faim : **${data.faim}%**\n${barreProgression(data.faim,"faim")}`);
+      return interaction.reply({ content:`🍖 F4X_Cat a été nourri ! Faim : **${data.faim}%**\n${barreProgression(data.faim,"faim")}`, ephemeral:false });
     }
 
     // --- Caresser ---
     if(interaction.commandName==="caresser"){
-      if(interaction.user.id!==data.maitre) return interaction.reply({ content:"❌ Seul le maître peut caresser F4X_Cat.", ephemeral:true });
+      if(interaction.user.id!==data.maitre) return interaction.reply({ content:"❌ Seul le maître peut caresser F4X_Cat.", ephemeral:false });
       data.bonheur=Math.min(100,data.bonheur+10);
       saveMaitreGentillesse(interaction.user.id,2);
       checkEtat();
       saveData();
-      return interaction.reply(`😺 F4X_Cat ronronne ! Bonheur : **${data.bonheur}%**\n${barreProgression(data.bonheur,"bonheur")}`);
+      return interaction.reply({ content:`😺 F4X_Cat ronronne ! Bonheur : **${data.bonheur}%**\n${barreProgression(data.bonheur,"bonheur")}`, ephemeral:false });
     }
 
     // --- Bonheur ---
     if(interaction.commandName==="bonheur")
-      return interaction.reply(`💖 Bonheur de F4X_Cat : **${data.bonheur}%**\n${barreProgression(data.bonheur,"bonheur")}`);
+      return interaction.reply({ content:`💖 Bonheur de F4X_Cat : **${data.bonheur}%**\n${barreProgression(data.bonheur,"bonheur")}`, ephemeral:false });
 
     // --- Admin ---
     if(interaction.commandName==="admin"){
@@ -176,6 +176,15 @@ client.on(Events.InteractionCreate, async interaction=>{
       const pwd = new TextInputBuilder().setCustomId("adminPassword").setLabel("Mot de passe").setStyle(TextInputStyle.Short).setRequired(true);
       modal.addComponents(new ActionRowBuilder().addComponents(pwd));
       return interaction.showModal(modal);
+    }
+
+    // --- Commande admin supplémentaire : voir infos complètes ---
+    if(interaction.commandName==="regardez"){
+      const embed = new EmbedBuilder()
+        .setTitle("🐾 Infos complètes F4X_Cat")
+        .setDescription(`👑 Maître : ${data.maitre ? `<@${data.maitre}>`:"Aucun"}\n🍗 Faim : **${data.faim}%** ${barreProgression(data.faim,"faim")}\n💖 Bonheur : **${data.bonheur}%** ${barreProgression(data.bonheur,"bonheur")}\n🧠 Etat : ${data.etat}\n📜 Maîtres précédents : ${data.anciensMaitres.map(m=>`<@${m.id}> (${m.gentillesse})`).join(", ") || "Aucun"}`)
+        .setColor("Gold").setFooter({ text:"Admin Panel" }).setTimestamp();
+      return interaction.reply({ embeds:[embed], ephemeral:false });
     }
   }
 
@@ -196,8 +205,8 @@ client.on(Events.InteractionCreate, async interaction=>{
       new ButtonBuilder().setCustomId("addFaim").setLabel("🍗 +10 Faim").setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId("addBonheur").setLabel("💖 +10 Bonheur").setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId("killF4X").setLabel("☠️ Tuer F4X").setStyle(ButtonStyle.Danger),
-      new ButtonBuilder().setCustomId("restoreF4X").setLabel("✨ Ressusciter F4X").setStyle(ButtonStyle.Primary)
-      // tu peux ajouter d'autres boutons pour arriver à 10+
+      new ButtonBuilder().setCustomId("restoreF4X").setLabel("✨ Ressusciter F4X").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("bonusAdmin").setLabel("⭐ Bonus Admin").setStyle(ButtonStyle.Primary)
     );
 
     await interaction.reply({ embeds:[embed], components:[row], ephemeral:true });
@@ -207,12 +216,12 @@ client.on(Events.InteractionCreate, async interaction=>{
   if(interaction.isButton()){
     if(!interaction.member.permissions.has("Administrator")) return;
     switch(interaction.customId){
-      case "resetF4X":
-        data = { maitre:null, faim:100, bonheur:100, anciensMaitres:[], etat:"vivant" }; saveData(); interaction.reply({ content:"♻️ F4X réinitialisé !", ephemeral:true }); break;
+      case "resetF4X": data={maitre:null,faim:100,bonheur:100,anciensMaitres:[],etat:"vivant"}; saveData(); interaction.reply({ content:"♻️ F4X réinitialisé !", ephemeral:true }); break;
       case "addFaim": data.faim=Math.min(100,data.faim+10); saveData(); interaction.reply({ content:"🍗 +10 Faim ajouté !", ephemeral:true }); break;
       case "addBonheur": data.bonheur=Math.min(100,data.bonheur+10); saveData(); interaction.reply({ content:"💖 +10 Bonheur ajouté !", ephemeral:true }); break;
       case "killF4X": data.etat="mort"; checkEtat(); saveData(); interaction.reply({ content:"☠️ F4X est mort !", ephemeral:true }); break;
       case "restoreF4X": data.etat="vivant"; checkEtat(); saveData(); interaction.reply({ content:"✨ F4X ressuscité !", ephemeral:true }); break;
+      case "bonusAdmin": data.faim=100; data.bonheur=100; saveData(); interaction.reply({ content:"⭐ Bonus admin appliqué : Faim et Bonheur à 100%", ephemeral:true }); break;
     }
   }
 });
