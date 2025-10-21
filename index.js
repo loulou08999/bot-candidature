@@ -1,4 +1,3 @@
-// index.js
 import {
   Client,
   GatewayIntentBits,
@@ -28,7 +27,7 @@ const ROLE_MAITRE = "1430215534456340592";
 const ADMIN_PASSWORD = "FkeeleiosX";
 const DATA_FILE = "./data.json";
 
-// --- Express keep alive (optionnel si deploy sur Render/Heroku) ---
+// --- Express keep alive ---
 import express from "express";
 const app = express();
 app.get("/", (req, res) => res.send("Bot F4X_Cat en ligne ✅"));
@@ -45,7 +44,7 @@ function saveData() {
   fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
 }
 
-// --- Bot Discord ---
+// --- Client Discord ---
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
 });
@@ -58,6 +57,7 @@ const commands = [
   new SlashCommandBuilder().setName("caresser").setDescription("Caresser F4X_Cat (+10% bonheur)."),
   new SlashCommandBuilder().setName("bonheur").setDescription("Voir le bonheur de F4X_Cat."),
   new SlashCommandBuilder().setName("admin").setDescription("Accéder au menu admin stylé de F4X_Cat."),
+  new SlashCommandBuilder().setName("abandonner").setDescription("Abandonner F4X_Cat (uniquement pour le maître)."),
 ].map((c) => c.toJSON());
 
 // --- Enregistrer les commandes ---
@@ -75,7 +75,7 @@ const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
   }
 })();
 
-// --- Helper pour barre de progression emoji ---
+// --- Helper barre de progression ---
 function barreProgression(val) {
   const total = 10;
   const rempli = Math.round((val / 100) * total);
@@ -84,15 +84,15 @@ function barreProgression(val) {
   return `${color.repeat(rempli)}⬛`.repeat(vide) + ` ${val}%`;
 }
 
-// --- Lancement ---
+// --- Bot prêt ---
 client.once("ready", () => console.log(`🤖 Connecté en tant que ${client.user.tag}`));
 
 // --- Interaction principale ---
 client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
-  // Empêche usage hors salon
-  if (interaction.channelId !== SALON_COMMANDES && interaction.commandName !== "admin") {
+  // --- Vérification salon ---
+  if (interaction.channelId !== SALON_COMMANDES && !["admin", "abandonner"].includes(interaction.commandName)) {
     return interaction.reply({ content: "❌ Cette commande n'est pas autorisée ici.", ephemeral: true });
   }
 
@@ -103,7 +103,18 @@ client.on(Events.InteractionCreate, async (interaction) => {
     saveData();
     const role = interaction.guild.roles.cache.get(ROLE_MAITRE);
     if (role) await interaction.member.roles.add(role);
-    return interaction.reply(`🎉 <@${interaction.user.id}> a adopté F4X_Cat !`);
+    return interaction.reply(`🎉 <@${interaction.user.id}> a adopté F4X_Cat ! Tu es maintenant le maître.`);
+  }
+
+  // /abandonner
+  if (interaction.commandName === "abandonner") {
+    if (interaction.user.id !== data.maitre) return interaction.reply({ content: "❌ Seul le maître peut abandonner F4X_Cat.", ephemeral: true });
+    const guild = interaction.guild;
+    const role = guild.roles.cache.get(ROLE_MAITRE);
+    if (role) await interaction.member.roles.remove(role);
+    data.maitre = null;
+    saveData();
+    return interaction.reply("😿 F4X_Cat a été abandonné. Il est maintenant disponible pour adoption !");
   }
 
   // /faim
@@ -130,22 +141,19 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
   // /admin
   if (interaction.commandName === "admin") {
-    const modal = new ModalBuilder()
-      .setCustomId("adminModal")
-      .setTitle("🔐 Accès Admin");
+    const modal = new ModalBuilder().setCustomId("adminModal").setTitle("🔐 Accès Admin");
     const pwd = new TextInputBuilder().setCustomId("adminPassword").setLabel("Mot de passe").setStyle(TextInputStyle.Short).setRequired(true);
     modal.addComponents(new ActionRowBuilder().addComponents(pwd));
     await interaction.showModal(modal);
   }
 });
 
-// --- Gestion modal mot de passe ---
+// --- Modal mot de passe admin ---
 client.on(Events.InteractionCreate, async (interaction) => {
   if (interaction.type === InteractionType.ModalSubmit && interaction.customId === "adminModal") {
     const password = interaction.fields.getTextInputValue("adminPassword");
     if (password !== ADMIN_PASSWORD) return interaction.reply({ content: "❌ Mot de passe incorrect.", ephemeral: true });
 
-    // --- Embed menu admin ---
     const embed = new EmbedBuilder()
       .setTitle("🐾 Menu Admin F4X_Cat")
       .setDescription(
@@ -170,7 +178,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
   // --- Gestion boutons menu admin ---
   if (interaction.isButton()) {
     const id = interaction.customId;
-
     switch (id) {
       case "faimPlus": data.faim = Math.min(100, data.faim + 10); break;
       case "faimMoins": data.faim = Math.max(0, data.faim - 10); break;
@@ -178,7 +185,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       case "bonheurMoins": data.bonheur = Math.max(0, data.bonheur - 10); break;
       case "reset": data = { maitre: null, faim: 100, bonheur: 100 }; break;
       case "changerMaitre":
-        // Menu select pour choisir nouveau maître
         const guild = interaction.guild;
         const membersOptions = guild.members.cache
           .filter(m => !m.user.bot)
@@ -205,15 +211,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
   if (interaction.isStringSelectMenu() && interaction.customId === "selectMaitre") {
     data.maitre = interaction.values[0];
     saveData();
-
     const guild = interaction.guild;
     const role = guild.roles.cache.get(ROLE_MAITRE);
-    // Retirer rôle à tous
     guild.members.cache.forEach(m => m.roles.remove(role).catch(()=>{}));
-    // Ajouter rôle au nouveau maître
     const member = guild.members.cache.get(data.maitre);
     if (member) await member.roles.add(role);
-
     await interaction.update({ content: `👑 Nouveau maître : <@${data.maitre}>`, components: [] });
   }
 });
