@@ -40,9 +40,7 @@ if (fs.existsSync(DATA_FILE)) {
 } else {
   fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
 }
-function saveData() {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
-}
+function saveData() { fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2)); }
 
 // --- Client Discord ---
 const client = new Client({
@@ -70,18 +68,18 @@ const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
       { body: commands }
     );
     console.log("✅ Commandes slash enregistrées !");
-  } catch (e) {
-    console.error("❌ Erreur :", e);
-  }
+  } catch (e) { console.error("❌ Erreur :", e); }
 })();
 
-// --- Helper barre de progression ---
-function barreProgression(val) {
+// --- Helper barre emoji stylée ---
+function barreProgression(val, type) {
   const total = 10;
   const rempli = Math.round((val / 100) * total);
   const vide = total - rempli;
-  const color = val > 70 ? "🟩" : val > 40 ? "🟨" : "🟥";
-  return `${color.repeat(rempli)}⬛`.repeat(vide) + ` ${val}%`;
+  let colorEmoji;
+  if(type === "faim") colorEmoji = val > 70 ? "🍗" : val > 40 ? "🥩" : "🍖";
+  else colorEmoji = val > 70 ? "💖" : val > 40 ? "💛" : "💔";
+  return `${colorEmoji.repeat(rempli)}⬛`.repeat(vide) + ` ${val}%`;
 }
 
 // --- Bot prêt ---
@@ -91,132 +89,106 @@ client.once("ready", () => console.log(`🤖 Connecté en tant que ${client.user
 client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
-  // --- Vérification salon ---
-  if (interaction.channelId !== SALON_COMMANDES && !["admin", "abandonner"].includes(interaction.commandName)) {
+  if (interaction.channelId !== SALON_COMMANDES && !["admin","abandonner"].includes(interaction.commandName)) 
     return interaction.reply({ content: "❌ Cette commande n'est pas autorisée ici.", ephemeral: true });
-  }
 
-  // /adopter
+  // --- Adopter ---
   if (interaction.commandName === "adopter") {
-    if (data.maitre) return interaction.reply({ content: `😿 F4X_Cat appartient déjà à <@${data.maitre}>.`, ephemeral: true });
+    if (data.maitre) return interaction.reply({ content: `😿 F4X_Cat est déjà adopté par <@${data.maitre}> !`, ephemeral: true });
     data.maitre = interaction.user.id;
     saveData();
     const role = interaction.guild.roles.cache.get(ROLE_MAITRE);
-    if (role) await interaction.member.roles.add(role);
-    return interaction.reply(`🎉 <@${interaction.user.id}> a adopté F4X_Cat ! Tu es maintenant le maître.`);
+    if(role) await interaction.member.roles.add(role);
+    return interaction.reply(`🎉 Bravo <@${interaction.user.id}> ! Tu as adopté **F4X_Cat** 🐱\n🍀 Prends bien soin de lui !`);
   }
 
-  // /abandonner
+  // --- Abandonner ---
   if (interaction.commandName === "abandonner") {
-    if (interaction.user.id !== data.maitre) return interaction.reply({ content: "❌ Seul le maître peut abandonner F4X_Cat.", ephemeral: true });
+    if(interaction.user.id !== data.maitre) return interaction.reply({ content:"❌ Seul le maître peut abandonner F4X_Cat.", ephemeral:true });
     const guild = interaction.guild;
     const role = guild.roles.cache.get(ROLE_MAITRE);
-    if (role) await interaction.member.roles.remove(role);
+    if(role) await interaction.member.roles.remove(role);
     data.maitre = null;
     saveData();
-    return interaction.reply("😿 F4X_Cat a été abandonné. Il est maintenant disponible pour adoption !");
+    return interaction.reply("😿 F4X_Cat a été abandonné et est maintenant disponible pour adoption !");
   }
 
-  // /faim
-  if (interaction.commandName === "faim") return interaction.reply(`🍗 Faim : **${data.faim}%**\n${barreProgression(data.faim)}`);
+  // --- Faim ---
+  if(interaction.commandName === "faim") 
+    return interaction.reply(`🍗 Faim de F4X_Cat : **${data.faim}%**\n${barreProgression(data.faim,"faim")}`);
 
-  // /nourrir
-  if (interaction.commandName === "nourrir") {
-    if (interaction.user.id !== data.maitre) return interaction.reply({ content: "❌ Seul le maître peut nourrir.", ephemeral: true });
-    data.faim = Math.min(100, data.faim + 10);
+  // --- Nourrir ---
+  if(interaction.commandName === "nourrir") {
+    if(interaction.user.id !== data.maitre) return interaction.reply({ content:"❌ Seul le maître peut nourrir F4X_Cat.", ephemeral:true });
+    data.faim = Math.min(100,data.faim+10);
     saveData();
-    return interaction.reply(`🍖 F4X_Cat a été nourri ! Faim : **${data.faim}%**\n${barreProgression(data.faim)}`);
+    return interaction.reply(`🍖 F4X_Cat a été nourri avec amour ! Faim : **${data.faim}%**\n${barreProgression(data.faim,"faim")}`);
   }
 
-  // /caresser
-  if (interaction.commandName === "caresser") {
-    if (interaction.user.id !== data.maitre) return interaction.reply({ content: "❌ Seul le maître peut caresser.", ephemeral: true });
-    data.bonheur = Math.min(100, data.bonheur + 10);
+  // --- Caresser ---
+  if(interaction.commandName === "caresser") {
+    if(interaction.user.id !== data.maitre) return interaction.reply({ content:"❌ Seul le maître peut caresser F4X_Cat.", ephemeral:true });
+    data.bonheur = Math.min(100,data.bonheur+10);
     saveData();
-    return interaction.reply(`😺 F4X_Cat est heureux ! Bonheur : **${data.bonheur}%**\n${barreProgression(data.bonheur)}`);
+    return interaction.reply(`😺 F4X_Cat ronronne de bonheur ! Bonheur : **${data.bonheur}%**\n${barreProgression(data.bonheur,"bonheur")}`);
   }
 
-  // /bonheur
-  if (interaction.commandName === "bonheur") return interaction.reply(`😺 Bonheur : **${data.bonheur}%**\n${barreProgression(data.bonheur)}`);
+  // --- Bonheur ---
+  if(interaction.commandName === "bonheur") 
+    return interaction.reply(`💖 Bonheur de F4X_Cat : **${data.bonheur}%**\n${barreProgression(data.bonheur,"bonheur")}`);
 
-  // /admin
-  if (interaction.commandName === "admin") {
-    const modal = new ModalBuilder().setCustomId("adminModal").setTitle("🔐 Accès Admin");
+  // --- Admin ---
+  if(interaction.commandName==="admin"){
+    const modal = new ModalBuilder().setCustomId("adminModal").setTitle("🔐 Accès Admin F4X_Cat");
     const pwd = new TextInputBuilder().setCustomId("adminPassword").setLabel("Mot de passe").setStyle(TextInputStyle.Short).setRequired(true);
     modal.addComponents(new ActionRowBuilder().addComponents(pwd));
     await interaction.showModal(modal);
   }
 });
 
-// --- Modal mot de passe admin ---
-client.on(Events.InteractionCreate, async (interaction) => {
-  if (interaction.type === InteractionType.ModalSubmit && interaction.customId === "adminModal") {
+// --- Modal Admin ---
+client.on(Events.InteractionCreate, async(interaction)=>{
+  if(interaction.type===InteractionType.ModalSubmit && interaction.customId==="adminModal"){
     const password = interaction.fields.getTextInputValue("adminPassword");
-    if (password !== ADMIN_PASSWORD) return interaction.reply({ content: "❌ Mot de passe incorrect.", ephemeral: true });
+    if(password!==ADMIN_PASSWORD) return interaction.reply({ content:"❌ Mot de passe incorrect.", ephemeral:true });
 
     const embed = new EmbedBuilder()
       .setTitle("🐾 Menu Admin F4X_Cat")
       .setDescription(
-        `👑 Maître : ${data.maitre ? `<@${data.maitre}>` : "Aucun"}\n🍗 Faim : **${data.faim}%** ${barreProgression(data.faim)}\n😺 Bonheur : **${data.bonheur}%** ${barreProgression(data.bonheur)}`
-      )
-      .setColor("Gold")
-      .setFooter({ text: "Menu visible uniquement pour toi" })
-      .setTimestamp();
+        `👑 Maître : ${data.maitre ? `<@${data.maitre}>`:"Aucun"}\n🍗 Faim : **${data.faim}%** ${barreProgression(data.faim,"faim")}\n💖 Bonheur : **${data.bonheur}%** ${barreProgression(data.bonheur,"bonheur")}`
+      ).setColor("Gold").setFooter({ text:"Menu visible uniquement pour toi" }).setTimestamp();
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId("faimPlus").setLabel("🍖 +10% Faim").setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId("faimMoins").setLabel("🍗 -10% Faim").setStyle(ButtonStyle.Danger),
       new ButtonBuilder().setCustomId("bonheurPlus").setLabel("💖 +10% Bonheur").setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId("bonheurMoins").setLabel("💔 -10% Bonheur").setStyle(ButtonStyle.Danger),
-      new ButtonBuilder().setCustomId("reset").setLabel("♻️ Réinitialiser").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("changerMaitre").setLabel("👑 Changer Maître").setStyle(ButtonStyle.Primary)
+      new ButtonBuilder().setCustomId("abandonMaitre").setLabel("😿 Abandonner maître").setStyle(ButtonStyle.Danger)
     );
 
-    await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
+    await interaction.reply({ embeds:[embed], components:[row], ephemeral:true });
   }
 
-  // --- Gestion boutons menu admin ---
-  if (interaction.isButton()) {
-    const id = interaction.customId;
-    switch (id) {
-      case "faimPlus": data.faim = Math.min(100, data.faim + 10); break;
-      case "faimMoins": data.faim = Math.max(0, data.faim - 10); break;
-      case "bonheurPlus": data.bonheur = Math.min(100, data.bonheur + 10); break;
-      case "bonheurMoins": data.bonheur = Math.max(0, data.bonheur - 10); break;
-      case "reset": data = { maitre: null, faim: 100, bonheur: 100 }; break;
-      case "changerMaitre":
-        const guild = interaction.guild;
-        const membersOptions = guild.members.cache
-          .filter(m => !m.user.bot)
-          .map(m => new StringSelectMenuOptionBuilder().setLabel(m.user.username).setValue(m.id));
-        const menu = new StringSelectMenuBuilder().setCustomId("selectMaitre").addOptions(membersOptions).setPlaceholder("Choisir un nouveau maître");
-        await interaction.reply({ content: "Sélectionne un nouveau maître :", components: [new ActionRowBuilder().addComponents(menu)], ephemeral: true });
-        return;
+  // --- Gestion boutons Admin ---
+  if(interaction.isButton()){
+    switch(interaction.customId){
+      case "faimPlus": data.faim=Math.min(100,data.faim+10); break;
+      case "bonheurPlus": data.bonheur=Math.min(100,data.bonheur+10); break;
+      case "abandonMaitre":
+        const guild=interaction.guild;
+        const role=guild.roles.cache.get(ROLE_MAITRE);
+        if(data.maitre){
+          const member=guild.members.cache.get(data.maitre);
+          if(member && role) await member.roles.remove(role);
+          data.maitre=null;
+        }
+        break;
     }
-
     saveData();
-    const updatedEmbed = new EmbedBuilder()
+    const updatedEmbed=new EmbedBuilder()
       .setTitle("🐾 Menu Admin F4X_Cat (Mis à jour)")
       .setDescription(
-        `👑 Maître : ${data.maitre ? `<@${data.maitre}>` : "Aucun"}\n🍗 Faim : **${data.faim}%** ${barreProgression(data.faim)}\n😺 Bonheur : **${data.bonheur}%** ${barreProgression(data.bonheur)}`
-      )
-      .setColor("Blue")
-      .setFooter({ text: "Menu visible uniquement pour toi" })
-      .setTimestamp();
-
-    await interaction.update({ embeds: [updatedEmbed], components: interaction.message.components });
-  }
-
-  // --- Choix nouveau maître ---
-  if (interaction.isStringSelectMenu() && interaction.customId === "selectMaitre") {
-    data.maitre = interaction.values[0];
-    saveData();
-    const guild = interaction.guild;
-    const role = guild.roles.cache.get(ROLE_MAITRE);
-    guild.members.cache.forEach(m => m.roles.remove(role).catch(()=>{}));
-    const member = guild.members.cache.get(data.maitre);
-    if (member) await member.roles.add(role);
-    await interaction.update({ content: `👑 Nouveau maître : <@${data.maitre}>`, components: [] });
+        `👑 Maître : ${data.maitre ? `<@${data.maitre}>`:"Aucun"}\n🍗 Faim : **${data.faim}%** ${barreProgression(data.faim,"faim")}\n💖 Bonheur : **${data.bonheur}%** ${barreProgression(data.bonheur,"bonheur")}`
+      ).setColor("Blue").setFooter({ text:"Menu visible uniquement pour toi" }).setTimestamp();
+    await interaction.update({ embeds:[updatedEmbed], components:interaction.message.components });
   }
 });
 
