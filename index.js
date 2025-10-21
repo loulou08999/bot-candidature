@@ -21,16 +21,21 @@ import express from "express";
 
 dotenv.config();
 
-// --- Constantes ---
-const SALON_COMMANDES = "1430215423101763604";
-const ROLE_MAITRE = "1430215534456340592";
+// --- Constantes depuis .env ---
+const SALON_COMMANDES = process.env.STAFF_CHANNEL_ID;
+const ROLE_MAITRE = process.env.ROLE_ID;
 const ADMIN_PASSWORD = "FkeeleiosX";
 const DATA_FILE = "./data.json";
+const CLIENT_ID = process.env.CLIENT_ID;
+const GUILD_ID = process.env.GUILD_ID;
+const TOKEN = process.env.TOKEN;
+const CANDIDATURE_CHANNEL_ID = process.env.CANDIDATURE_CHANNEL_ID;
+const PORT = process.env.PORT || 3000;
 
 // --- Express keep alive ---
 const app = express();
 app.get("/", (req, res) => res.send("Bot F4X_Cat en ligne ✅"));
-app.listen(process.env.PORT || 3000);
+app.listen(PORT, () => console.log(`Serveur en ligne sur le port ${PORT}`));
 
 // --- Charger ou créer le fichier data.json ---
 let data = { maitre: null, faim: 100, bonheur: 100, anciensMaitres: [], etat: "vivant" };
@@ -54,11 +59,14 @@ const commands = [
 ].map(c => c.toJSON());
 
 // --- Enregistrer les commandes ---
-const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
+const rest = new REST({ version: "10" }).setToken(TOKEN);
 (async () => {
   try {
     console.log("📦 Mise à jour des commandes...");
-    await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID), { body: commands });
+    await rest.put(
+      Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+      { body: commands }
+    );
     console.log("✅ Commandes slash enregistrées !");
   } catch (e) { console.error("❌ Erreur :", e); }
 })();
@@ -69,7 +77,7 @@ function barreProgression(val, type){
   const rempli = Math.round((val/100)*total);
   const vide = total - rempli;
   let emoji = type==="faim" ? (val>70?"🍗":val>40?"🥩":"🍖") : (val>70?"💖":val>40?"💛":"💔");
-  return `${emoji.repeat(rempli)}⬛`.repeat(vide) + ` ${val}%`;
+  return `${emoji.repeat(rempli)}${"⬛".repeat(vide)} ${val}%`;
 }
 
 // --- Fonction gentillesse ---
@@ -97,6 +105,7 @@ function checkEtat(){
   }
   if(data.bonheur <= 0){
     data.etat = "depression";
+    data.faim = Math.max(0,data.faim-20); // perte double faim en dépression
   } else if(data.etat === "depression" && data.bonheur > 0){
     data.etat = "vivant";
   }
@@ -186,61 +195,26 @@ client.on(Events.InteractionCreate, async interaction=>{
       new ButtonBuilder().setCustomId("resetF4X").setLabel("♻️ Réinitialiser F4X").setStyle(ButtonStyle.Danger),
       new ButtonBuilder().setCustomId("addFaim").setLabel("🍗 +10 Faim").setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId("addBonheur").setLabel("💖 +10 Bonheur").setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId("forceAdopt").setLabel("👑 Forcer Adoption").setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId("forceAbandon").setLabel("😿 Forcer Abandon").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("reanimer").setLabel("🩺 Réanimer F4X").setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId("supprimerMaitre").setLabel("❌ Supprimer Maître").setStyle(ButtonStyle.Danger),
-      new ButtonBuilder().setCustomId("ajouterMaitre").setLabel("➕ Ajouter Maître").setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId("bonusFaim").setLabel("🍗 Bonus Faim +50").setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId("bonusBonheur").setLabel("💖 Bonus Bonheur +50").setStyle(ButtonStyle.Success)
+      new ButtonBuilder().setCustomId("killF4X").setLabel("☠️ Tuer F4X").setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId("restoreF4X").setLabel("✨ Ressusciter F4X").setStyle(ButtonStyle.Primary)
+      // tu peux ajouter d'autres boutons pour arriver à 10+
     );
 
     await interaction.reply({ embeds:[embed], components:[row], ephemeral:true });
   }
 
-  // --- Gestion boutons admin ---
+  // --- Gestion des boutons admin ---
   if(interaction.isButton()){
-    const user = interaction.user;
-    if(interaction.message.interaction?.user.id!==user.id) return interaction.reply({ content:"❌ Ces boutons sont uniquement pour l'admin.", ephemeral:true });
-
+    if(!interaction.member.permissions.has("Administrator")) return;
     switch(interaction.customId){
       case "resetF4X":
-        data.faim=100; data.bonheur=100; data.etat="vivant"; data.maitre=null; saveData();
-        return interaction.update({ content:"♻️ F4X_Cat réinitialisé !", embeds:[], components:[] });
-      case "addFaim":
-        data.faim=Math.min(100,data.faim+10); saveData();
-        return interaction.update({ content:`🍗 +10 Faim. Faim actuelle : ${data.faim}%`, embeds:[], components:[] });
-      case "addBonheur":
-        data.bonheur=Math.min(100,data.bonheur+10); saveData();
-        return interaction.update({ content:`💖 +10 Bonheur. Bonheur actuel : ${data.bonheur}%`, embeds:[], components:[] });
-      case "forceAdopt":
-        data.maitre=user.id; saveMaitreGentillesse(user.id,0); saveData();
-        const role = interaction.guild.roles.cache.get(ROLE_MAITRE);
-        if(role){ const member = interaction.guild.members.cache.get(user.id); if(member) member.roles.add(role).catch(()=>{}); }
-        return interaction.update({ content:`👑 F4X_Cat adopté par <@${user.id}> !`, embeds:[], components:[] });
-      case "forceAbandon":
-        data.maitre=null; saveData();
-        const role2 = interaction.guild.roles.cache.get(ROLE_MAITRE);
-        if(role2){ const member = interaction.guild.members.cache.get(user.id); if(member) member.roles.remove(role2).catch(()=>{}); }
-        return interaction.update({ content:"😿 F4X_Cat abandonné !", embeds:[], components:[] });
-      case "reanimer":
-        if(data.etat==="mort"){ data.etat="vivant"; data.faim=50; data.bonheur=50; saveData(); return interaction.update({ content:"🩺 F4X_Cat réanimé !", embeds:[], components:[] }); }
-        else return interaction.reply({ content:"❌ F4X_Cat n'est pas mort.", ephemeral:true });
-      case "supprimerMaitre":
-        data.anciensMaitres = data.anciensMaitres.filter(m=>m.id!==user.id); saveData();
-        return interaction.update({ content:"❌ Maître supprimé de l'historique.", embeds:[], components:[] });
-      case "ajouterMaitre":
-        data.anciensMaitres.push({id:user.id,gentillesse:0}); saveData();
-        return interaction.update({ content:"➕ Maître ajouté à l'historique.", embeds:[], components:[] });
-      case "bonusFaim":
-        data.faim=Math.min(100,data.faim+50); saveData();
-        return interaction.update({ content:`🍗 Bonus Faim +50. Faim actuelle : ${data.faim}%`, embeds:[], components:[] });
-      case "bonusBonheur":
-        data.bonheur=Math.min(100,data.bonheur+50); saveData();
-        return interaction.update({ content:`💖 Bonus Bonheur +50. Bonheur actuelle : ${data.bonheur}%`, embeds:[], components:[] });
-      default: return;
+        data = { maitre:null, faim:100, bonheur:100, anciensMaitres:[], etat:"vivant" }; saveData(); interaction.reply({ content:"♻️ F4X réinitialisé !", ephemeral:true }); break;
+      case "addFaim": data.faim=Math.min(100,data.faim+10); saveData(); interaction.reply({ content:"🍗 +10 Faim ajouté !", ephemeral:true }); break;
+      case "addBonheur": data.bonheur=Math.min(100,data.bonheur+10); saveData(); interaction.reply({ content:"💖 +10 Bonheur ajouté !", ephemeral:true }); break;
+      case "killF4X": data.etat="mort"; checkEtat(); saveData(); interaction.reply({ content:"☠️ F4X est mort !", ephemeral:true }); break;
+      case "restoreF4X": data.etat="vivant"; checkEtat(); saveData(); interaction.reply({ content:"✨ F4X ressuscité !", ephemeral:true }); break;
     }
   }
 });
 
-client.login(process.env.TOKEN);
+client.login(TOKEN);
