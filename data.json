@@ -1,5 +1,7 @@
 {
   "maitre": null,
   "faim": 100,
-  "bonheur": 100
+  "bonheur": 100,
+  "anciensMaitres": [],
+  "etat": "vivant"
 }
